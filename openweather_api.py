@@ -5,20 +5,14 @@ from flask import Response
 from flask import jsonify
 from flask import request
 
-from flask_restful import Resource, Api, reqparse
+from flask_restful import Resource, Api, reqparse, abort
 
-# import urllib2
 from urllib.request import urlopen
 
 import json
 import time
 
-from dateutil import tz
-import calendar
 import sys
-
-# import logging
-
 
 from const import (
     _LOGGER,
@@ -29,6 +23,8 @@ from const import (
 import os
 
 from util import config_from_file
+
+import socket
 
 # # create logger with 'openweather_application'
 # logger = logging.getLogger('openweather_application')
@@ -53,7 +49,6 @@ api = Api(app)
 parser = reqparse.RequestParser()
 parser.add_argument('api_key')
 
-import socket
 
 def internet(host="1.1.1.1", port=53, timeout=3):
     """
@@ -69,32 +64,30 @@ def internet(host="1.1.1.1", port=53, timeout=3):
         print(ex.message)
         return False
 
-class OutsideTemp(Resource):
 
+class OutsideTemp(Resource):
     CONST_JSON = 'JSON'
     CONST_INFLUX = 'influx'
     CONST_METRIC_UNIT = 'metric'
 
-    global location
-    global location_id
-    global tempVal
-    global observation_epoch
+    # global location
+    # global location_id
+    # global tempVal
+    # global observation_epoch
 
-    global pressure
-    global humidity
+    # global pressure
+    # global humidity
 
     # Wind
-    global windSpeed
-    global windDeg
+    # global wind_speed
+    # global windDeg
 
     # Weather condition
-    global weatherId
-    global weatherMain
-    global weatherDescription
+    # global weatherId
+    # global weatherMain
+    # global weatherDescription
 
-    #global OPENWEATHER_LOCATION_ID
-    global OPENWEATHER_API_KEY
-    global OPENWEATHER_UNITS
+    # global OPENWEATHER_UNITS
 
     def __init__(self):
 
@@ -115,7 +108,7 @@ class OutsideTemp(Resource):
             raise FileNotFoundError
 
         # Wind
-        self.windSpeed = ''
+        self.wind_speed = ''
         self.windDeg = 0
 
         # Weather condition
@@ -135,46 +128,45 @@ class OutsideTemp(Resource):
         if self.OPENWEATHER_UNITS is None:
             self.OPENWEATHER_UNITS = self.CONST_METRIC_UNIT
 
-
         # if os.environ['LOCATION_ID'] is None:
 
         # self.location_id = os.getenv('LOCATION_ID', None)
         # if self.location_id is None:
         #     raise KeyError
 
-# print(os.environ['HOME'])
+    # print(os.environ['HOME'])
 
-        # Load variables
-        # with open('openweather-vars.json') as f:
-            # configdata = json.load(f)
+    # Load variables
+    # with open('openweather-vars.json') as f:
+    # configdata = json.load(f)
 
-            #self.OPENWEATHER_LOCATION_ID = configdata['LOCATION_ID']
-            # self.OPENWEATHER_API_KEY = configdata['API_KEY']
-            # self.OPENWEATHER_UNITS = configdata['UNITS']
-        # logger.info('Api Key:' + self.OPENWEATHER_API_KEY)
-        # logger.info('Units:' + self.OPENWEATHER_UNITS)
+    # self.OPENWEATHER_LOCATION_ID = configdata['LOCATION_ID']
+    # self.OPENWEATHER_API_KEY = configdata['API_KEY']
+    # self.OPENWEATHER_UNITS = configdata['UNITS']
+    # logger.info('Api Key:' + self.OPENWEATHER_API_KEY)
+    # logger.info('Units:' + self.OPENWEATHER_UNITS)
 
-
-    def getOutsideInfos(self, location_id):
-        #Initialize
+    def get_outside_info(self, location_id):
+        # Initialize
         self.success_result = True
         openweathermap = None
-        iconnected=False
+        is_connected = False
+        json_string = ''
 
         try:
             self.location_id = location_id
 
-            nboftrials=0
+            nboftrials = 0
 
-            while not iconnected and nboftrials<5:
-                iconnected=internet()
-                if not iconnected:
-                    nboftrials+=1
-                    sleep(10)
+            while not is_connected and nboftrials < 5:
+                is_connected = internet()
+                if not is_connected:
+                    nboftrials += 1
+                    time.sleep(10)
 
-            #Python 3.4:
-            openweathermap = urlopen('http://api.openweathermap.org/data/2.5/weather?id=' + str(location_id) + '&appid=' + self.OPENWEATHER_API_KEY + '&units=' + self.OPENWEATHER_UNITS )
-
+            # Python 3.4:
+            openweathermap = urlopen('http://api.openweathermap.org/data/2.5/weather?id=' + str(
+                location_id) + '&appid=' + self.OPENWEATHER_API_KEY + '&units=' + self.OPENWEATHER_UNITS)
 
             json_string = openweathermap.read()
             parsed_json = json.loads(json_string)
@@ -193,8 +185,8 @@ class OutsideTemp(Resource):
 
             # Wind
             # Unit Default: meter/sec, Metric: meter/sec, Imperial: miles/hour.
-            self.windSpeed = parsed_json['wind']['speed']
-            self.windDeg   = int(parsed_json['wind']['deg'])
+            self.wind_speed = parsed_json['wind']['speed']
+            self.windDeg = int(parsed_json['wind']['deg'])
 
             # Weather condition
             self.weatherId = int(parsed_json['weather'][0]['id'])
@@ -203,11 +195,11 @@ class OutsideTemp(Resource):
 
             self.location = parsed_json['name']
 
-
         except:
             self.success_result = False
             if openweathermap is not None:
-                _LOGGER.error('Problem with getting outside infos in JSON. openweathermap = '+str(openweathermap) +' and json_string = '+str(json_string))
+                _LOGGER.error('Problem with getting outside infos in JSON. openweathermap = ' + str(
+                    openweathermap) + ' and json_string = ' + str(json_string))
             else:
                 _LOGGER.error('Problem with getting outside infos in JSON. openweathermap is None.')
 
@@ -219,13 +211,13 @@ class OutsideTemp(Resource):
             if openweathermap is not None:
                 openweathermap.close()
 
-    def get(self,location_id):
+    def get(self, location_id):
         _LOGGER.info('Receive a request. location_id: ' + str(location_id))
         count = 0
         self.success_result = False
 
-        while (not self.success_result):
-            self.getOutsideInfos(location_id)
+        while not self.success_result:
+            self.get_outside_info(location_id)
 
             count += 1
             if (count >= 3) or (self.success_result == True):
@@ -233,46 +225,49 @@ class OutsideTemp(Resource):
             else:
                 time.sleep(3)
 
-        if (not self.success_result):
+        if not self.success_result:
             abort(500)
 
         # JSON Format
         if self.opt_format == self.CONST_JSON:
 
-            outsideTemp = { 'service': 'outsideTemp',
+            outside_temp = {'service': 'outsideTemp',
                             'tempVal': self.tempVal,
                             'pressure': self.pressure,
                             'humidity': self.humidity,
                             'observation_epoch': self.observation_epoch,
-                            'windSpeed': self.windSpeed,
+                            'windSpeed': self.wind_speed,
                             'windDeg': self.windDeg,
                             'weatherId': self.weatherId,
                             'weatherMain': self.weatherMain,
                             'weatherDescription': self.weatherDescription,
                             'location': self.location
-                          }
+                            }
 
-            return jsonify(outsideTemp)
+            return jsonify(outside_temp)
 
-        # Infux format
+        # Infuxdb format
         elif self.opt_format == self.CONST_INFLUX:
 
             influxdb_measurement = 'apidata'
             influxdb_tag_set = 'source=wunderground,location=' + self.location + ',opt_format=' + self.opt_format
-            influxdb_field_set = 'tempVal=' + str(self.tempVal) + ',humidity=' + str(self.humidity) + ',windSpeed=' + str(self.windSpeed) + ',windDeg=' + str(self.windDeg) + ',weatherId=' + str(self.weatherId)
+            influxdb_field_set = 'tempVal=' + str(self.tempVal) + ',humidity=' + str(
+                self.humidity) + ',windSpeed=' + str(self.wind_speed) + ',windDeg=' + str(
+                self.windDeg) + ',weatherId=' + str(self.weatherId)
             influxdb_timestamp = str(self.observation_epoch) + '000000000'
 
-            returnValue = ( influxdb_measurement + ',' + influxdb_tag_set + ' ' + influxdb_field_set + ' ' + influxdb_timestamp + '\n' )
+            return_value = (
+                    influxdb_measurement + ',' + influxdb_tag_set + ' ' + influxdb_field_set + ' ' + influxdb_timestamp + '\n')
 
-            return Response(returnValue, mimetype='text/xml')
+            return Response(return_value, mimetype='text/xml')
 
 
 class ApiManagement(Resource):
 
-
     def __init__(self):
+        args = parser.parse_args()
+        self.api_key = args['api_key']
         self.config_filename = OPENWEATHER_CONFIG_FILENAME
-
 
     def _write_config(self) -> None:
         """Writes API Key to a file."""
@@ -282,8 +277,6 @@ class ApiManagement(Resource):
         config_from_file(self.config_filename, config)
 
     def post(self):
-        args = parser.parse_args()
-        self.api_key = args['api_key']
         self._write_config()
 
         return "Success", 201
@@ -295,4 +288,3 @@ api.add_resource(ApiManagement, '/set_api')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=80, debug=True)
-
